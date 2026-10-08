@@ -1,3 +1,4 @@
+import { verifyOAuth, oauthChallenge } from './oauth.js';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 
 const VERSION = '2025-03-26';
@@ -75,7 +76,7 @@ export function makeMcpHandler({client,guildId,ChannelType}){
   throw Error('Herramienta desconocida');
  }
  return async function mcpHandler(req,res){
-  if(!secureBearer(req))return json(res,401,{error:'No autorizado'},{'WWW-Authenticate':'Bearer realm="365 MCP"'});
+  if(!verifyOAuth(req))return oauthChallenge(res);
   if(req.method!=='POST')return json(res,405,{error:'Usa POST para MCP'},{Allow:'POST'});
   let message;
   try{message=await readJSON(req);}catch{return json(res,400,error(null,-32700,'JSON inválido'));}

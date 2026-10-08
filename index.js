@@ -1,3 +1,4 @@
+import { oauthRoute } from './oauth.js';
 import 'dotenv/config';
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import crypto from 'node:crypto';
@@ -126,6 +127,7 @@ async function getBody(req){
 }
 const mcpHandler=makeMcpHandler({client,guildId:GUILD_ID,ChannelType});
 const server=http.createServer(async(req,res)=>{
+  if(await oauthRoute(req,res))return;
   if(req.url?.split('?')[0]==='/mcp')return mcpHandler(req,res);
  if(req.url==='/health'&&req.method==='GET')return sendJSON(res,200,{ok:true,botReady:client.isReady()});
  if(!req.url?.startsWith('/bridge/'))return sendJSON(res,404,{error:'No encontrado'});
