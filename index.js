@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import crypto from 'node:crypto';
+import { makeMcpHandler } from './mcp.js';
 const { DISCORD_TOKEN, CLIENT_ID, GUILD_ID, OPENAI_API_KEY, OWNER_ID } = process.env;
 if (![DISCORD_TOKEN, CLIENT_ID, GUILD_ID].every(Boolean)) throw new Error('Faltan DISCORD_TOKEN, CLIENT_ID o GUILD_ID');
 const privateReply = { flags: MessageFlags.Ephemeral };
@@ -20,7 +21,7 @@ const client = new Client({intents:[GatewayIntentBits.Guilds]});
 const pending = new Map();
 const safeName = name => typeof name==='string' && /^[\p{L}\p{N}_\- ]{1,90}$/u.test(name);
 function can(i,p){return i.memberPermissions?.has(p)===true;}
-function authorized(i){return can(i,PermissionFlagsBits.Administrator) || (Boolean(OWNER_ID) && i.user.id===OWNER_ID);}
+function authorized(i){return Boolean(OWNER_ID) && i.user.id===OWNER_ID;}
 function confirmButtons(id){return new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`yes:${id}`).setLabel('Confirmar').setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId(`no:${id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary));}
 async function planWithAI(instruction,guild){
  if(!OPENAI_API_KEY) throw new Error('Falta OPENAI_API_KEY en Railway');
@@ -60,12 +61,12 @@ client.on('interactionCreate',async i=>{
   if(!i.isChatInputCommand())return;
   if(i.commandName==='ping')return i.reply({content:'🏓 ¡365 V2 está operativo!',...privateReply});
   if(i.commandName==='panel'){
-   if(!can(i,PermissionFlagsBits.ManageGuild))return i.reply({content:'Sin permisos.',...privateReply});
+   if(!authorized(i))return i.reply({content:'Solo el propietario puede utilizar este comando.',...privateReply});
    const embed=new EmbedBuilder().setTitle('365 | Panel IPL').setDescription('Usa `/assistant`, `/anuncio`, `/crear-canal`, `/editar-canal` y `/roles`. Las acciones IA requieren confirmación.').setColor(0x5865F2);
    return i.reply({embeds:[embed],...privateReply});
   }
   if(i.commandName==='assistant'){
-   if(!authorized(i))return i.reply({content:'El asistente IA está reservado al propietario (OWNER_ID) o administradores.',...privateReply});
+   if(!authorized(i))return i.reply({content:'El asistente IA está reservado al propietario (OWNER_ID).',...privateReply});
    await i.deferReply(privateReply);const plan=await planWithAI(i.options.getString('instruccion',true),i.guild);
    const allowed=['create_channel','rename_channel','move_channel','send_message'];
    if(!allowed.includes(plan.action))return i.editReply('No puedo ejecutar esa instrucción de forma segura con la V2. Usa un comando específico o concreta una sola acción.');
@@ -74,17 +75,17 @@ client.on('interactionCreate',async i=>{
    return i.editReply({content:`**Propuesta de 365 (sin ejecutar):**\n${String(plan.summary||plan.action).slice(0,500)}\nAcción: \`${plan.action}\`\nCaduca en 2 minutos.`,components:[confirmButtons(id)]});
   }
   if(i.commandName==='anuncio'){
-   if(!can(i,PermissionFlagsBits.ManageGuild))return i.reply({content:'Sin permisos.',...privateReply});
+   if(!authorized(i))return i.reply({content:'Solo el propietario puede utilizar este comando.',...privateReply});
    const ch=i.options.getChannel('canal',true);if(ch.type!==ChannelType.GuildText)throw new Error('Canal no válido');
    await ch.send({content:i.options.getString('mensaje',true),allowedMentions:{parse:[]}});return i.reply({content:`Anuncio publicado en ${ch}.`,...privateReply});
   }
   if(i.commandName==='crear-canal'){
-   if(!can(i,PermissionFlagsBits.ManageChannels))return i.reply({content:'Sin permisos.',...privateReply});
+   if(!authorized(i))return i.reply({content:'Solo el propietario puede utilizar este comando.',...privateReply});
    const name=i.options.getString('nombre',true);if(!safeName(name))throw new Error('Nombre inválido');
    const ch=await i.guild.channels.create({name,type:ChannelType.GuildText,reason:`365 por ${i.user.id}`});return i.reply({content:`Creado: ${ch}`,...privateReply});
   }
   if(i.commandName==='editar-canal'){
-   if(!can(i,PermissionFlagsBits.ManageChannels))return i.reply({content:'Sin permisos.',...privateReply});
+   if(!authorized(i))return i.reply({content:'Solo el propietario puede utilizar este comando.',...privateReply});
    const ch=i.options.getChannel('canal',true),name=i.options.getString('nombre'),cat=i.options.getChannel('categoria');
    if(!name&&!cat)throw new Error('Indica un nombre o una categoría');
    if(name){if(!safeName(name))throw new Error('Nombre inválido');await ch.setName(name,`365 por ${i.user.id}`);}
@@ -92,7 +93,7 @@ client.on('interactionCreate',async i=>{
    return i.reply({content:`Canal actualizado: ${ch}`,...privateReply});
   }
   if(i.commandName==='roles'){
-   if(!can(i,PermissionFlagsBits.ManageRoles))return i.reply({content:'Sin permisos.',...privateReply});
+   if(!authorized(i))return i.reply({content:'Solo el propietario puede utilizar este comando.',...privateReply});
    const member=await i.guild.members.fetch(i.options.getUser('usuario',true).id),role=i.options.getRole('rol',true),action=i.options.getString('accion',true);
    const me=await i.guild.members.fetchMe();
    if(role.managed||role.id===i.guild.id||role.position>=me.roles.highest.position||role.permissions.has(PermissionFlagsBits.Administrator))throw new Error('Rol protegido o fuera de jerarquía');
@@ -123,7 +124,9 @@ async function getBody(req){
  for await(const chunk of req){body+=chunk;if(body.length>10000)throw Error('Solicitud demasiado grande');}
  return JSON.parse(body||'{}');
 }
+const mcpHandler=makeMcpHandler({client,guildId:GUILD_ID,ChannelType});
 const server=http.createServer(async(req,res)=>{
+  if(req.url?.split('?')[0]==='/mcp')return mcpHandler(req,res);
  if(req.url==='/health'&&req.method==='GET')return sendJSON(res,200,{ok:true,botReady:client.isReady()});
  if(!req.url?.startsWith('/bridge/'))return sendJSON(res,404,{error:'No encontrado'});
  if(!isAuthorized(req))return sendJSON(res,401,{error:'No autorizado'});
