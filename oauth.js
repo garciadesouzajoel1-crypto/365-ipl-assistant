@@ -3,9 +3,11 @@ const origin = (process.env.OAUTH_BASE_URL || 'https://365-ipl-assistant-product
 const resource = `${origin}/mcp`;
 const secret = process.env.OAUTH_OWNER_SECRET || '';
 const signing = process.env.OAUTH_SIGNING_KEY || '';
-const clients = new Map(), requests = new Map(), codes = new Map(), failures = new Map();
+const clients = new Map(), codes = new Map(), failures = new Map();
 const b64 = b => Buffer.from(b).toString('base64url');
 const sha = s => b64(crypto.createHash('sha256').update(s).digest());
+const signRequest = data => { const value=b64(JSON.stringify(data)); return `${value}.${b64(crypto.createHmac('sha256',signing).update(`oauth-request:${value}`).digest())}`; };
+const readRequest = value => { if(typeof value!=='string'||value.length>4096)return null; const parts=value.split('.');if(parts.length!==2)return null;const [data,mac]=parts;const expected=b64(crypto.createHmac('sha256',signing).update(`oauth-request:${data}`).digest());if(!equal(mac,expected))return null;try{const r=JSON.parse(Buffer.from(data,'base64url').toString());return r.expires>Date.now()&&r.expires<Date.now()+600000&&typeof r.client_id==='string'&&typeof r.redirect_uri==='string'&&typeof r.challenge==='string'&&typeof r.state==='string'?r:null;}catch{return null;} };
 const equal = (a,b) => typeof a==='string' && typeof b==='string' && a.length===b.length && crypto.timingSafeEqual(Buffer.from(a),Buffer.from(b));
 const respond = (res, status, data, headers={}) => {res.writeHead(status, {'Content-Type':'application/json','Cache-Control':'no-store',...headers});res.end(JSON.stringify(data));};
 const fail = (res, status, message) => respond(res,status,{error:message});
@@ -30,14 +32,14 @@ export async function oauthRoute(req,res){const url=new URL(req.url,origin), pat
   const id=crypto.randomUUID();clients.set(id,{redirect_uris:p.redirect_uris,created:Date.now(),expires:Date.now()+7*86400000});respond(res,201,{client_id:id,client_id_issued_at:Math.floor(Date.now()/1000),redirect_uris:p.redirect_uris,client_name:p.client_name||'ChatGPT',grant_types:['authorization_code'],response_types:['code'],token_endpoint_auth_method:'none'});return true;
  }
  if(path==='/oauth/authorize'&&req.method==='GET'){
-  clean(clients);clean(requests);const q=url.searchParams,client=clients.get(q.get('client_id'));
+  clean(clients);const q=url.searchParams,client=clients.get(q.get('client_id'));
   if(!client||!client.redirect_uris.includes(q.get('redirect_uri'))||q.get('response_type')!=='code'||q.get('code_challenge_method')!=='S256'||!/^[A-Za-z0-9_-]{43}$/.test(q.get('code_challenge')||'')||q.get('resource')!==resource||!q.get('state'))return fail(res,400,'invalid_request'),true;
-  const id=crypto.randomUUID();requests.set(id,{client_id:q.get('client_id'),redirect_uri:q.get('redirect_uri'),challenge:q.get('code_challenge'),state:q.get('state'),expires:Date.now()+300000});loginPage(res,id);return true;
+  const id=signRequest({client_id:q.get('client_id'),redirect_uri:q.get('redirect_uri'),challenge:q.get('code_challenge'),state:q.get('state'),expires:Date.now()+300000});loginPage(res,id);return true;
  }
  if(path==='/oauth/approve'&&req.method==='POST'){
   const ip=req.socket.remoteAddress||'unknown';const attempts=failures.get(ip)||{count:0,expires:Date.now()+900000};if(attempts.expires<Date.now()){attempts.count=0;attempts.expires=Date.now()+900000;}if(attempts.count>=5)return fail(res,429,'Demasiados intentos. Espera 15 minutos.'),true;
-  clean(requests);const p=await body(req),r=requests.get(p.request_id);if(!r)return fail(res,400,'Solicitud caducada'),true;
-  requests.delete(p.request_id);if(!equal(p.password,secret)){attempts.count++;failures.set(ip,attempts);return fail(res,403,'Contraseña incorrecta. Inicia la conexión de nuevo.'),true;}failures.delete(ip);
+  const p=await body(req),r=readRequest(p.request_id);if(!r)return fail(res,400,'Solicitud caducada o inválida. Reinicia la conexión.'),true;
+  if(!equal(p.password,secret)){attempts.count++;failures.set(ip,attempts);return fail(res,403,'Contraseña incorrecta. Inicia la conexión de nuevo.'),true;}failures.delete(ip);
   const code=crypto.randomBytes(32).toString('base64url');codes.set(sha(code),{...r,expires:Date.now()+120000});const redirect=new URL(r.redirect_uri);redirect.searchParams.set('code',code);redirect.searchParams.set('state',r.state);res.writeHead(302,{Location:redirect.toString(),'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});res.end();return true;
  }
  if(path==='/oauth/token'&&req.method==='POST'){
