@@ -32,8 +32,8 @@ export async function oauthRoute(req,res){const url=new URL(req.url,origin), pat
  if(path==='/oauth/register'&&req.method==='POST'){
   const p=await body(req);if(!Array.isArray(p.redirect_uris)||p.redirect_uris.length<1||p.redirect_uris.length>5||!p.redirect_uris.every(allowedRedirect))return fail(res,400,'invalid_redirect_uri'),true;
   if(p.token_endpoint_auth_method && p.token_endpoint_auth_method!=='none')return fail(res,400,'invalid_client_metadata'),true;
-  clean(clients);if(clients.size>50)return fail(res,429,'too_many_clients'),true;
-  const id=crypto.randomUUID();clients.set(id,{redirect_uris:p.redirect_uris,created:Date.now(),expires:Date.now()+7*86400000});respond(res,201,{client_id:id,client_id_issued_at:Math.floor(Date.now()/1000),redirect_uris:p.redirect_uris,client_name:p.client_name||'ChatGPT',grant_types:['authorization_code'],response_types:['code'],token_endpoint_auth_method:'none'});return true;
+  // Client IDs firmados: no requieren almacenamiento en memoria y son compatibles con getClient().
+  const id=clientIdFor(p.redirect_uris);respond(res,201,{client_id:id,client_id_issued_at:Math.floor(Date.now()/1000),redirect_uris:p.redirect_uris,client_name:typeof p.client_name==='string'?p.client_name.slice(0,100):'ChatGPT',grant_types:['authorization_code'],response_types:['code'],token_endpoint_auth_method:'none'});return true;
  }
  if(path==='/oauth/authorize'&&req.method==='GET'){
   const q=url.searchParams,client=getClient(q.get('client_id'));
