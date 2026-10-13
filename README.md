@@ -1,24 +1,17 @@
-# 365 IPL Assistant V3 — puente privado
+# 365 — STARPOINT WORLD SERIES
 
-## Qué contiene
-Mantiene los comandos Discord de V2 y añade una API HTTP privada para integrar un futuro conector MCP.
+English CS2 community onboarding and manual competition workflows for Discord, with an owner-authenticated ChatGPT MCP connector.
 
-## Instalación
-Sube **los archivos de dentro de esta carpeta** al directorio raíz de tu repositorio de GitHub. Railway ejecuta `npm install` y `npm start`.
+See [SETUP.md](SETUP.md) for Railway persistent-volume configuration, permissions, explicit setup approval, command usage, remaining production features and the live acceptance checklist.
 
-Variables existentes: `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`; configura `OWNER_ID` para limitar los comandos privados en Discord. Para el asistente interno opcional: `OPENAI_API_KEY`. Nueva variable: `BRIDGE_API_KEY`, un secreto aleatorio largo (mínimo 32 caracteres) que **no debes compartir ni subir a GitHub**. Railway suministra `PORT` automáticamente.
+## Validation
 
-## Endpoints privados (solo con Authorization: Bearer <BRIDGE_API_KEY>)
-- GET `/bridge/status`
-- GET `/bridge/channels`
-- POST `/bridge/plan` con `{"action":"create_channel","name":"pruebas-365"}`; devuelve `approval_id`.
-- POST `/bridge/execute` con `{"approval_id":"...","confirm":true}`. La propuesta caduca en cinco minutos y solo se puede ejecutar una vez.
-- GET `/health` solo indica si está listo; no muestra secretos.
+```sh
+npm ci --ignore-scripts
+npm run check
+npm test
+```
 
-## Seguridad y límites
-- No expongas la clave en URLs, chats, capturas o repositorios.
-- No se permiten eliminaciones, cambios masivos ni menciones automáticas.
-- **La API no es todavía un conector ChatGPT listo para instalar.** Para usarla directamente desde ChatGPT hace falta implementar un servidor MCP y autenticación OAuth compatible, además de que tu plan permita herramientas de escritura.
-- En planes donde no esté disponible MCP con escritura, puedes usar comandos Discord o un cliente privado externo como alternativa.
-- Las propuestas pendientes están en memoria: desaparecen al reiniciar Railway.
-- No se han realizado pruebas contra tu servidor real.
+The automated tests use mocked Discord resources. They verify deterministic state and permission construction, not the live guild or Railway deployment. New STARPOINT automation is opt-in through `SWS_ENABLED=true` and requires `SWS_DATA_PATH` on durable storage. Setup does not run on startup: the configured owner must inspect `/sws-audit`, run `/sws-setup`, and confirm the preview.
+
+Existing OAuth and private bridge routes are retained. New `inspect_server` MCP tooling provides a read-only role and permission audit. Administrative propose/execute actions still require explicit owner confirmation. Region selection and competition results do not use an AI model.
