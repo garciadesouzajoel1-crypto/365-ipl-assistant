@@ -2,7 +2,7 @@
 import {REGIONS} from './regions.js';
 const groups={ 'START HERE':'entry',GLOBAL:'global','PRIVATE WORKSPACES':'private',...Object.fromEntries(Object.entries(REGIONS).map(([key,[name]])=>[name.toUpperCase(),key]))};
 const entry=['welcome','rules','choose-region','entry-support'];
-const global=['announcements','competition-calendar','competition-guide','world-finals','community','clips','support'];
+const global=['announcements','competition-calendar','competition-guide','world-finals','community','clips','support','commands'];
 const regional=['announcements','general','registrations','looking-for-team','looking-for-player','scrims','standings','support'];
 const normalize=rows=>JSON.stringify(rows.map(o=>[o.id,o.type,String(o.allow),String(o.deny)]).sort((a,b)=>a[0].localeCompare(b[0])));
 export function recoveryPlan(audit,current,resources){
