@@ -4,7 +4,7 @@ import {ChannelType as C,PermissionFlagsBits as P,ActionRowBuilder,ButtonBuilder
 import {REGIONS,LANGUAGES,countryGuide} from './regions.js';
 export const STAFF=['Owner','Administrator','Tournament Manager','Referee','Moderator','Support','Caster'];
 const BASE=[P.ViewChannel,P.ReadMessageHistory];
-export const ENTRY=['welcome','rules','choose-region','entry-support'];
+export const ENTRY=['welcome','rules','choose-region','entry-support','starpoint-general'];
 export const GLOBAL=['announcements','competition-calendar','competition-guide','world-finals','community','clips','support','commands'];
 export const REGIONAL=['announcements','general','registrations','looking-for-team','looking-for-player','scrims','standings','support'];
 export const READONLY=new Set(['welcome','rules','choose-region','entry-support','announcements','competition-calendar','competition-guide','world-finals','registrations','standings','support','bot-logs','commands']);
