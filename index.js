@@ -1,3 +1,4 @@
+import {sendVisual,editVisual,replyVisual,editReplyVisual,formatMessage} from './src/messages.js';
 import {attachRuntime,swsCommands} from './src/runtime.js';
 import { oauthRoute } from './oauth.js';
 import 'dotenv/config';
@@ -13,7 +14,7 @@ await rest.put(Routes.applicationGuildCommands(CLIENT_ID,GUILD_ID),{body:command
 console.log('365 guild commands registered');
 const client = new Client({intents:[GatewayIntentBits.Guilds, ...(process.env.SWS_ENABLED === 'true' ? [GatewayIntentBits.GuildMembers] : [])]});
 if (process.env.SWS_ENABLED === 'true') attachRuntime(client, GUILD_ID);
-client.on('interactionCreate', async i => { if(i.inGuild() && i.guildId === GUILD_ID && i.isChatInputCommand() && i.commandName === 'ping') await i.reply({content:'365 is online.',flags:MessageFlags.Ephemeral}); });
+client.on('interactionCreate', async i => { if(i.inGuild() && i.guildId === GUILD_ID && i.isChatInputCommand() && i.commandName === 'ping') await replyVisual(i,{content:'365 is online.',flags:MessageFlags.Ephemeral}); });
 await client.login(DISCORD_TOKEN);
 
 
@@ -80,7 +81,7 @@ const server=http.createServer(async(req,res)=>{
     const channel=await guild.channels.fetch(b.channel_id);
     if(b.action==='rename_channel')result=await channel.setName(b.name,'365: orden privada aprobada');
     if(b.action==='move_channel')result=await channel.setParent(b.category_id,{lockPermissions:false});
-    if(b.action==='send_message')result=await channel.send({content:b.message,allowedMentions:{parse:[]}});
+    if(b.action==='send_message')result=await sendVisual(channel,{content:b.message,allowedMentions:{parse:[]}});
    }
    console.log('[365 BRIDGE AUDIT]',new Date().toISOString(),b.action,JSON.stringify(b).slice(0,300));
    return sendJSON(res,200,{success:true,action:b.action,result_id:result?.id});
@@ -89,4 +90,5 @@ const server=http.createServer(async(req,res)=>{
  }catch(e){console.error('[365 BRIDGE ERROR]',e);return sendJSON(res,500,{error:'Unable to complete request'});}
 });
 server.listen(Number(process.env.PORT||3000),'0.0.0.0',()=>console.log('365 Bridge listening on PORT'));
+
 

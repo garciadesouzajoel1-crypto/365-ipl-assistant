@@ -1,3 +1,4 @@
+import {sendVisual,editVisual,replyVisual,editReplyVisual,formatMessage} from './src/messages.js';
 import {inspect} from './src/setup.js';
 import { verifyOAuth, oauthChallenge } from './oauth.js';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
@@ -48,7 +49,7 @@ export function makeMcpHandler({client,guildId,ChannelType}){
    return {channels:[...channels.values()].filter(Boolean).map(c=>({id:c.id,name:c.name,type:c.type===ChannelType.GuildCategory?'category':c.type===ChannelType.GuildText?'text':'other',parent_id:c.parentId}))};
   }
   if(name==='propose_action'){
-   const p=checkAction(args);
+   const p=checkAction(args);if(p.action==='send_message')p.message=formatMessage(p.message);
    if(p.action!=='create_channel'){
     const ch=await g.channels.fetch(p.channel_id).catch(()=>null);
     if(ch?.type!==ChannelType.GuildText)throw Error('Text channel not found');
@@ -71,7 +72,7 @@ export function makeMcpHandler({client,guildId,ChannelType}){
     if(ch?.type!==ChannelType.GuildText)throw Error('Invalid channel');
     if(p.action==='rename_channel')created=await ch.setName(p.name,reason);
     if(p.action==='move_channel')created=await ch.setParent(p.category_id,{lockPermissions:false,reason});
-    if(p.action==='send_message')created=await ch.send({content:p.message,allowedMentions:{parse:[]}});
+    if(p.action==='send_message')created=await sendVisual(ch,{content:p.message,allowedMentions:{parse:[]}});
    }
    console.log('[365 MCP AUDIT]',new Date().toISOString(),p.action,created?.id);
    return {success:true,action:p.action,result_id:created?.id};
@@ -101,4 +102,5 @@ export function makeMcpHandler({client,guildId,ChannelType}){
   }catch(e){console.error('[365 MCP ERROR]',e);return json(res,500,error(id,-32603,'Internal error'));}
  };
 }
+
 
