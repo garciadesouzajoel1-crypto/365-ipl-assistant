@@ -1,1 +1,18 @@
-{"name":"ipl-365-assistant","version":"0.1.0","private":true,"type":"module","scripts":{"start":"node index.js","check":"node --check index.js"},"engines":{"node":">=20"},"dependencies":{"discord.js":"^14.18.0","dotenv":"^16.4.7"}}
+{
+  "name": "ipl-365-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js && node --check mcp.js && node --check src/runtime.js && node --check src/setup.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7"
+  }
+}
