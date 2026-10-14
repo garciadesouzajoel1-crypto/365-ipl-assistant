@@ -1,5 +1,6 @@
 import {previewReset,confirmReset,runReset,parseCutoff} from './message-reset.js';
 import {commandGuide} from './command-guide.js';
+import {controlPanels,routeControl} from './control-center.js';
 import {recoveryPlan,applyRecovery} from './recovery.js';
 import {sendVisual,editVisual,replyVisual,editReplyVisual,formatMessage} from './messages.js';
 import {SlashCommandBuilder,PermissionFlagsBits as P,ChannelType,MessageFlags,ActionRowBuilder,ButtonBuilder,ButtonStyle,ModalBuilder,TextInputBuilder,TextInputStyle} from 'discord.js';
@@ -14,7 +15,7 @@ const integer=(c,n,d)=>c.addIntegerOption(o=>o.setName(n).setDescription(d).setR
 const user=(c,n,d)=>c.addUserOption(o=>o.setName(n).setDescription(d).setRequired(true));
 const cmd=(n,d,admin=false)=>{const c=new SlashCommandBuilder().setName(n).setDescription(d);if(admin&&n.startsWith('sws-'))c.setDefaultMemberPermissions(P.ManageGuild);return c;};
 export const swsCommands=[
- cmd('help','Show available commands and access rules'),
+ cmd('help','Show available commands and access rules'),cmd('sws-panels','Create or refresh player and staff control centers',true),
  cmd('sws-reset-messages','Preview, confirm and monitor a reset of this bot’s messages',true).addStringOption(o=>o.setName('action').setDescription('Reset action').setRequired(true).addChoices({name:'Preview',value:'preview'},{name:'Status',value:'status'},{name:'Resume',value:'resume'},{name:'Cancel or pause',value:'cancel'})).addStringOption(o=>o.setName('before').setDescription('Delete messages strictly before this ISO date with timezone')).addStringOption(o=>o.setName('mode').setDescription('Whether to repost content').addChoices({name:'Delete and repost',value:'repost'},{name:'Delete only',value:'delete-only'})),
  cmd('sws-recover','Preview recovery of channel IDs from your private server audit',true).addAttachmentOption(o=>o.setName('audit').setDescription('The JSON file returned by /sws-audit').setRequired(true)),
  cmd('sws-audit','Inspect server roles, permissions and managed resources',true),cmd('sws-setup','Preview and confirm STARPOINT server configuration',true),
@@ -36,6 +37,13 @@ export function attachRuntime(client,guildId){
  const staff=i=>owner(i)||['Tournament Manager','Administrator'].some(n=>i.member.roles.cache.has(s.data.resources['role:'+n]));
  const supportStaff=i=>staff(i)||['Support','Moderator','Referee'].some(n=>i.member.roles.cache.has(s.data.resources['role:'+n]));
  const respond=(i,content)=>i.deferred||i.replied?editReplyVisual(i,{content,allowedMentions:{parse:[]}}):replyVisual(i,{content,...eph,allowedMentions:{parse:[]}});
+
+ const executeControl=async(i,name,sub,values={},def={})=>{const proxy=Object.create(i);Object.defineProperties(proxy,{customId:{value:undefined},commandName:{value:name},isButton:{value:()=>false},isStringSelectMenu:{value:()=>false},isModalSubmit:{value:()=>false},options:{value:{getSubcommand:()=>sub,getString:k=>values[k]||null,getInteger:k=>{if(values[k]===undefined)return null;const v=Number(values[k]);if(!Number.isSafeInteger(v)||v<0||v>100)throw Error('Invalid integer: '+k);return v;},getUser:(k)=>{const id=String(values[k]||'').replace(/[^0-9]/g,'');if(!/^\\d{17,20}$/.test(id))throw Error('Enter a valid Discord user ID for '+k);return {id};},getAttachment:()=>null}}});await handle(proxy);};
+ executeControl.pending=new Map();
+ async function publishControlCenters(g){await g.channels.fetch();const me=await g.members.fetchMe();const entry=s.data.resources['category:entry']||g.channels.cache.find(x=>x.type===ChannelType.GuildCategory&&x.name==='START HERE')?.id;const staffCategory=s.data.resources['category:staff']||g.channels.cache.find(x=>x.type===ChannelType.GuildCategory&&x.name.toLowerCase().includes('staff'))?.id;if(!entry||!staffCategory)throw Error('START HERE or STAFF category missing; run server setup first');
+ const build=async(key,name,parent,staffOnly)=>{let ch=s.data.resources[key]?g.channels.cache.get(s.data.resources[key]):null;if(!ch||ch.type!==ChannelType.GuildText||ch.parentId!==parent)ch=g.channels.cache.find(x=>x.type===ChannelType.GuildText&&x.parentId===parent&&x.name===name);if(!ch){const ow=staffOnly?[{id:g.id,deny:[P.ViewChannel]},{id:me.id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.ManageChannels]},...['Owner','Administrator','Tournament Manager'].map(n=>s.data.resources['role:'+n]).filter(Boolean).map(id=>({id,allow:[P.ViewChannel,P.ReadMessageHistory]}))]:[{id:g.id,allow:[P.ViewChannel,P.ReadMessageHistory],deny:[P.SendMessages]},{id:me.id,allow:[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.ManageChannels]}];ch=await g.channels.create({name,type:ChannelType.GuildText,parent,permissionOverwrites:ow,reason:'STARPOINT button control center'});}s.transaction(d=>d.resources[key]=ch.id);return ch;};
+ for(const [key,name,parent,staffOnly] of [['ui:player','control-center',entry,false],['ui:staff','staff-control-center',staffCategory,true]]){const ch=await build(key,name,parent,staffOnly);const panels=controlPanels(staffOnly);const previous=s.data.resources[key+':messages']||[];for(const id of previous){const old=await ch.messages.fetch(id).catch(()=>null);if(old&&old.author.id===client.user.id)await old.delete().catch(()=>{});}const ids=[];for(const panel of panels){const m=await sendVisual(ch,{...panel,allowedMentions:{parse:[]}});if(m?.id)ids.push(m.id);}s.transaction(d=>d.resources[key+':messages']=ids);}
+ }
  const myTeam=id=>Object.values(s.data.teams).find(t=>t.players.includes(id));
  function captain(id){const t=myTeam(id);if(!t||t.captain!==id)throw Error('Only a team captain can perform this action');return t;}
  function frozen(team){if(Object.values(s.data.matches).some(m=>[m.a,m.b].includes(team)&&m.status!=='archived'))return true;return Object.values(s.data.registrations).some(r=>r.team===team&&s.data.competitions[r.competition]?.active&&r.status==='accepted');}
@@ -61,6 +69,7 @@ export function attachRuntime(client,guildId){
 
  async function handle(i){if(!i.inGuild()||i.guildId!==guildId)return;if(!(i.customId?.startsWith('sws:')||swsCommands.some(c=>c.name===i.commandName)))return;
  try{
+ if(i.customId?.startsWith('sws:ui:')||i.customId?.startsWith('sws:ui-form:')||i.customId?.startsWith('sws:ui-confirm:')){const member=await i.guild.members.fetch(i.user.id);i.member=member;await routeControl(i,{isStaff:staff,isOwner:owner,execute:executeControl,onboarding:s.data.resources['entry:choose-region']?'<#'+s.data.resources['entry:choose-region']+'>':'#choose-region'});return;}
  if(i.customId==='sws:ticket'||i.commandName==='ticket')return await ticketModal(i);
  await i.deferReply(eph);
  i.member=await i.guild.members.fetch(i.user.id);
@@ -80,6 +89,7 @@ export function attachRuntime(client,guildId){
  if(i.isModalSubmit()&&i.customId==='sws:ticket-form'){return await lock('ticket:'+i.user.id,async()=>{const existing=Object.values(s.data.tickets).find(t=>t.user===i.user.id&&t.status==='open');if(existing)return await respond(i,`Your open ticket: <#${existing.channel}>`);const id=randomUUID().slice(0,8),competition=i.fields.getTextInputValue('competition'),reason=i.fields.getTextInputValue('reason'),region=s.data.members[i.user.id]?.region||'entry';const ch=await privateRoom(i.guild,'ticket:'+id,'ticket-'+id,[i.user.id],['Owner','Administrator','Tournament Manager','Support']);s.transaction(d=>d.tickets[id]={id,user:i.user.id,competition,reason,region,channel:ch.id,status:'open',created:Date.now()});await sendVisual(ch,{content:`**Support ticket ${id}**\nRegion: ${region}\nCompetition: ${competition||'Not specified'}\nReason: ${reason}\n\n**Assigned to:** Unclaimed\n**Status:** OPEN`,components:ticketControls(id),allowedMentions:{parse:[]}});await log(i.guild,'ticket-opened',{id,region,competition});return await respond(i,`Private ticket created: <#${ch.id}>`);});}
  if(s.data.jobs.messageReset?.status==='running'&&i.commandName!=='sws-reset-messages'&&i.commandName!=='sws-audit')throw Error('Message reset is running; please try again after it completes');
  const get=n=>i.options.getString(n),uid=n=>i.options.getUser(n,true).id;const n=i.commandName;
+ if(n==='sws-panels'){if(!owner(i))throw Error('Owner access required');await publishControlCenters(i.guild);return await respond(i,'Player and staff button control centers published. Existing slash commands remain available.');}
  if(n==='help')return await respond(i,commandGuide);
  if(n==='sws-reset-messages'){if(!owner(i))throw Error('Owner access required');const action=get('action'),job=s.data.jobs.messageReset;
  if(action==='status')return await respond(i,job?`**Status:** ${job.status}\n**Processed:** ${job.index}/${job.messages.length}\n**Deleted:** ${job.deleted}\n**Reposted:** ${job.reposted}\n${job.error?'**Attention:** '+job.error:''}`:'No message reset has been prepared.');
