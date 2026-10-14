@@ -69,7 +69,7 @@ export function attachRuntime(client,guildId){
 
  async function handle(i){if(!i.inGuild()||i.guildId!==guildId)return;if(!(i.customId?.startsWith('sws:')||swsCommands.some(c=>c.name===i.commandName)))return;
  try{
- if(i.customId?.startsWith('sws:ui:')||i.customId?.startsWith('sws:ui-form:')||i.customId?.startsWith('sws:ui-confirm:')){const member=await i.guild.members.fetch(i.user.id);i.member=member;await routeControl(i,{isStaff:staff,isOwner:owner,execute:executeControl,onboarding:s.data.resources['entry:choose-region']?'<#'+s.data.resources['entry:choose-region']+'>':'#choose-region'});return;}
+ if(i.customId?.startsWith('sws:ui:')||i.customId?.startsWith('sws:ui-form:')||i.customId?.startsWith('sws:ui-confirm:')||i.customId?.startsWith('sws:ui-user:')){const member=await i.guild.members.fetch(i.user.id);i.member=member;await routeControl(i,{isStaff:staff,isOwner:owner,execute:executeControl,onboarding:s.data.resources['entry:choose-region']?'<#'+s.data.resources['entry:choose-region']+'>':'#choose-region'});return;}
  if(i.customId==='sws:ticket'||i.commandName==='ticket')return await ticketModal(i);
  await i.deferReply(eph);
  i.member=await i.guild.members.fetch(i.user.id);
