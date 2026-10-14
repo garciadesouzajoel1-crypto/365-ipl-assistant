@@ -35,7 +35,7 @@ const groups=[
 ];
 const staffGroups=[
  ['🏆 TOURNAMENT MANAGEMENT',[['competition-create','CREATE COMPETITION'],['competition-close','CLOSE COMPETITION'],['match-create','SCHEDULE MATCH'],['result-resolve','RESOLVE RESULT'],['match-archive','ARCHIVE MATCH'],['region-approve','APPROVE REGION'],['region-reject','REJECT REGION']]],
- ['🛠️ SERVER MAINTENANCE',[['sws-audit','SERVER AUDIT'],['sws-setup','SERVER SETUP'],['reset-preview','RESET PREVIEW'],['reset-status','RESET STATUS'],['reset-resume','RESUME RESET'],['reset-cancel','CANCEL RESET']]]
+ ['🛠️ SERVER MAINTENANCE',[['sws-audit','SERVER AUDIT'],['sws-recover','RECOVER IDS'],['sws-setup','SERVER SETUP'],['reset-preview','RESET PREVIEW'],['reset-status','RESET STATUS'],['reset-resume','RESUME RESET'],['reset-cancel','CANCEL RESET']]]
 ];
 export function controlPanels(staff=false){return (staff?staffGroups:groups).map(([heading,buttons])=>({content:'**'+heading+'**\\nSelect an action below. Responses are private. Existing permissions and eligibility rules still apply.',components:buttons.reduce((rows,[id,label],index)=>{if(index%5===0)rows.push(new ActionRowBuilder());rows.at(-1).addComponents(new ButtonBuilder().setCustomId('sws:ui:'+id).setLabel(label).setStyle(staff?ButtonStyle.Secondary:ButtonStyle.Primary));return rows;},[])}));}
 function form(id,def){const m=new ModalBuilder().setCustomId('sws:ui-form:'+id).setTitle(def.title.slice(0,45));for(const [key,label,required] of def.fields){m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(key).setLabel(label.slice(0,45)).setStyle(TextInputStyle.Short).setRequired(required).setMaxLength(200)));}return m;}
@@ -45,6 +45,7 @@ export async function routeControl(i,{isStaff,isOwner,execute,onboarding}){
  const id=key.split(':')[2];
  if(id==='onboarding'){await i.reply({content:'Complete onboarding in '+onboarding+'. Choose your region and languages, then press ACCEPT RULES.',flags:64});return true;}
  if(id==='help'){await execute(i,'help',null,{});return true;}
+ if(id==='sws-recover'){if(!isOwner(i))throw Error('Owner access required');await i.reply({content:'To recover resource IDs, attach the JSON file returned by SERVER AUDIT using **/sws-recover**. Discord modals cannot upload files. Recovery always requires a separate confirmation.',flags:64});return true;}
  if(id==='ticket'){
   const modal=new ModalBuilder().setCustomId('sws:ticket-form').setTitle('Private support');
   for(const [field,label,required,style] of [['competition','Competition ID (optional)',false,TextInputStyle.Short],['reason','How can we help?',true,TextInputStyle.Paragraph]]){
