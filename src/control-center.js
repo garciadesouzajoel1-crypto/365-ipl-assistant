@@ -1,10 +1,10 @@
-import {ActionRowBuilder,ButtonBuilder,ButtonStyle,ModalBuilder,TextInputBuilder,TextInputStyle} from 'discord.js';
+import {ActionRowBuilder,ButtonBuilder,ButtonStyle,ModalBuilder,TextInputBuilder,TextInputStyle,UserSelectMenuBuilder} from 'discord.js';
 
 // Interactive panels call the existing command handlers; no separate team or competition business logic.
 const actions={
  profile:{title:'My profile',fields:[['steam','Steam ID (optional)',false],['faceit','FACEIT ID (optional)',false]],command:'profile'},
  'team-create':{title:'Create a team',fields:[['name','Team name',true]],command:'team',sub:'create'},
- 'team-invite':{title:'Invite player',fields:[['player','Discord user ID (from Copy User ID)',true]],command:'team',sub:'invite',users:['player']},
+ 'team-invite':{title:'Invite player',command:'team',sub:'invite',users:['player']},
  'team-accept':{title:'Accept invitation',fields:[['team','Team ID',true]],command:'team',sub:'accept'},
  'team-roster':{command:'team',sub:'roster'},
  'team-remove':{title:'Remove player',fields:[['player','Discord user ID',true]],command:'team',sub:'remove',users:['player'],confirm:true},
@@ -41,7 +41,7 @@ export function controlPanels(staff=false){return (staff?staffGroups:groups).map
 function form(id,def){const m=new ModalBuilder().setCustomId('sws:ui-form:'+id).setTitle(def.title.slice(0,45));for(const [key,label,required] of def.fields){m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(key).setLabel(label.slice(0,45)).setStyle(TextInputStyle.Short).setRequired(required).setMaxLength(200)));}return m;}
 export async function routeControl(i,{isStaff,isOwner,execute,onboarding}){
  const key=i.customId||'';
- if(!['sws:ui:','sws:ui-form:','sws:ui-confirm:'].some(prefix=>key.startsWith(prefix)))return false;
+ if(!['sws:ui:','sws:ui-form:','sws:ui-confirm:','sws:ui-user:'].some(prefix=>key.startsWith(prefix)))return false;
  const id=key.split(':')[2];
  if(id==='onboarding'){await i.reply({content:'Complete onboarding in '+onboarding+'. Choose your region and languages, then press ACCEPT RULES.',flags:64});return true;}
  if(id==='help'){await execute(i,'help',null,{});return true;}
@@ -56,6 +56,8 @@ export async function routeControl(i,{isStaff,isOwner,execute,onboarding}){
  const def=actions[id];if(!def)throw Error('Unknown control center action');
  if(def.owner&&!isOwner(i))throw Error('Owner access required');
  if(def.staff&&!isStaff(i))throw Error('Tournament Manager access required');
+ if(key==='sws:ui:team-invite'){const row=new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('sws:ui-user:team-invite').setPlaceholder('Search and select a server member').setMinValues(1).setMaxValues(1));await i.reply({content:'**Invite a player**\\nSearch by Discord username or display name and select the member. You do not need their ID.',components:[row],flags:64});return true;}
+ if(key==='sws:ui-user:team-invite'){const selected=i.values?.[0];if(!/^\\d{17,20}$/.test(selected||''))throw Error('Select one valid Discord member');await execute(i,def.command,def.sub,{player:selected},def);return true;}
  if(key.startsWith('sws:ui:')&&def.fields){await i.showModal(form(id,def));return true;}
  let values={...def.fixed};
  if(key.startsWith('sws:ui-form:')){
