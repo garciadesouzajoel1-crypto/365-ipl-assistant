@@ -57,7 +57,7 @@ export async function routeControl(i,{isStaff,isOwner,execute,onboarding}){
  if(def.owner&&!isOwner(i))throw Error('Owner access required');
  if(def.staff&&!isStaff(i))throw Error('Tournament Manager access required');
  if(key==='sws:ui:team-invite'){const row=new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('sws:ui-user:team-invite').setPlaceholder('Search and select a server member').setMinValues(1).setMaxValues(1));await i.reply({content:'**Invite a player**\\nSearch by Discord username or display name and select the member. You do not need their ID.',components:[row],flags:64});return true;}
- if(key==='sws:ui-user:team-invite'){const selected=i.values?.[0];if(!/^\\d{17,20}$/.test(selected||''))throw Error('Select one valid Discord member');await execute(i,def.command,def.sub,{player:selected},def);return true;}
+ if(key==='sws:ui-user:team-invite'){const selected=i.values?.[0];if(!/^\d{17,20}$/.test(selected||''))throw Error('Select one valid Discord member');await execute(i,def.command,def.sub,{player:selected},def);return true;}
  if(key.startsWith('sws:ui:')&&def.fields){await i.showModal(form(id,def));return true;}
  let values={...def.fixed};
  if(key.startsWith('sws:ui-form:')){
