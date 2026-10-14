@@ -39,12 +39,44 @@ const staffGroups=[
 ];
 export function controlPanels(staff=false){return (staff?staffGroups:groups).map(([heading,buttons])=>({content:'**'+heading+'**\\nSelect an action below. Responses are private. Existing permissions and eligibility rules still apply.',components:buttons.reduce((rows,[id,label],index)=>{if(index%5===0)rows.push(new ActionRowBuilder());rows.at(-1).addComponents(new ButtonBuilder().setCustomId('sws:ui:'+id).setLabel(label).setStyle(staff?ButtonStyle.Secondary:ButtonStyle.Primary));return rows;},[])}));}
 function form(id,def){const m=new ModalBuilder().setCustomId('sws:ui-form:'+id).setTitle(def.title.slice(0,45));for(const [key,label,required] of def.fields){m.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(key).setLabel(label.slice(0,45)).setStyle(TextInputStyle.Short).setRequired(required).setMaxLength(200)));}return m;}
-export async function routeControl(i,{isStaff,isOwner,execute,onboarding}){const key=i.customId||'';if(!key.startsWith('sws:ui:')&&!key.startsWith('sws:ui-form:')&&!key.startsWith('sws:ui-confirm:'))return false;
- const [,,id]=key.split(':');if(id==='onboarding'){await i.reply({content:'Complete the onboarding in '+onboarding+'. Select your region and languages, then press ACCEPT RULES.',flags:64});return true;}if(id==='help'){await execute(i,'help',null,{});return true;}if(id==='ticket'){await i.showModal(new ModalBuilder().setCustomId('sws:ticket-form').setTitle('Private support').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('competition').setLabel('Competition ID (optional)').setStyle(TextInputStyle.Short).setRequired(false)),new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('How can we help?').setStyle(TextInputStyle.Paragraph).setRequired(true)));return true;}
- const def=actions[id];if(!def)throw Error('Unknown control center action');if(def.owner&&!isOwner(i))throw Error('Owner access required');if(def.staff&&!isStaff(i))throw Error('Tournament Manager access required');
+export async function routeControl(i,{isStaff,isOwner,execute,onboarding}){
+ const key=i.customId||'';
+ if(!['sws:ui:','sws:ui-form:','sws:ui-confirm:'].some(prefix=>key.startsWith(prefix)))return false;
+ const id=key.split(':')[2];
+ if(id==='onboarding'){await i.reply({content:'Complete onboarding in '+onboarding+'. Choose your region and languages, then press ACCEPT RULES.',flags:64});return true;}
+ if(id==='help'){await execute(i,'help',null,{});return true;}
+ if(id==='ticket'){
+  const modal=new ModalBuilder().setCustomId('sws:ticket-form').setTitle('Private support');
+  for(const [field,label,required,style] of [['competition','Competition ID (optional)',false,TextInputStyle.Short],['reason','How can we help?',true,TextInputStyle.Paragraph]]){
+   modal.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(field).setLabel(label).setStyle(style).setRequired(required)));
+  }
+  await i.showModal(modal);return true;
+ }
+ const def=actions[id];if(!def)throw Error('Unknown control center action');
+ if(def.owner&&!isOwner(i))throw Error('Owner access required');
+ if(def.staff&&!isStaff(i))throw Error('Tournament Manager access required');
  if(key.startsWith('sws:ui:')&&def.fields){await i.showModal(form(id,def));return true;}
- const values={...def.fixed};if(key.startsWith('sws:ui-form:')){for(const [name] of def.fields)values[name]=i.fields.getTextInputValue(name).trim();if(def.confirm){execute.pending.set(i.user.id+':'+id,{values,expires:Date.now()+300000});await i.reply({content:'Confirm **'+def.title+'**?\\n'+Object.entries(values).map(([k,v])=>'**'+k+':** '+String(v).slice(0,150)).join('\\n'),components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('sws:ui-confirm:'+id+':yes').setLabel('CONFIRM').setStyle(ButtonStyle.Danger),new ButtonBuilder().setCustomId('sws:ui-confirm:'+id+':no').setLabel('CANCEL').setStyle(ButtonStyle.Secondary))],flags:64});return true;}}
- if(key.startsWith('sws:ui-confirm:')){const yes=key.endsWith(':yes');if(!yes){await i.reply({content:'Action cancelled.',flags:64});return true;}const pending=execute.pending.get(i.user.id+':'+id);if(!pending||pending.expires<Date.now())throw Error('Confirmation expired. Start again.');execute.pending.delete(i.user.id+':'+id);await execute(i,def.command,def.sub,pending.values,def);return true;}
- await execute(i,def.command,def.sub,values,def);return true;
+ let values={...def.fixed};
+ if(key.startsWith('sws:ui-form:')){
+  for(const [name] of def.fields)values[name]=i.fields.getTextInputValue(name).trim();
+  if(def.confirm){
+   execute.pending.set(i.user.id+':'+id,{values,expires:Date.now()+300000});
+   const summary=Object.entries(values).map(([k,v])=>'**'+k+':** '+String(v).slice(0,150)).join('\\n');
+   const row=new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('sws:ui-confirm:'+id+':yes').setLabel('CONFIRM').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('sws:ui-confirm:'+id+':no').setLabel('CANCEL').setStyle(ButtonStyle.Secondary)
+   );
+   await i.reply({content:'Confirm **'+def.title+'**?\\n'+summary,components:[row],flags:64});
+   return true;
+  }
+ }
+ if(key.startsWith('sws:ui-confirm:')){
+  if(!key.endsWith(':yes')){execute.pending.delete(i.user.id+':'+id);await i.reply({content:'Action cancelled.',flags:64});return true;}
+  const pending=execute.pending.get(i.user.id+':'+id);
+  if(!pending||pending.expires<Date.now())throw Error('Confirmation expired. Start again.');
+  execute.pending.delete(i.user.id+':'+id);values=pending.values;
+ }
+ await execute(i,def.command,def.sub,values,def);
+ return true;
 }
 export function getControlAction(id){return actions[id];}
